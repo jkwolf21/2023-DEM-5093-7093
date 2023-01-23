@@ -25,7 +25,6 @@ For those of you interested in R, Dr. Corey Sparks has published all of the exam
 
 # RTools: 
 You should also install version 4.2 install of RTools if you are a windows user (https://cran.r-project.org/bin/windows/Rtools/).
-Corey has also posted data and other resources to his GitHub repository https://github.com/coreysparks/DEM7093. I’m currently updating mine for class and will share the link later.
 
 # R Packages: 
 Copy and paste the following command in RStudio to install the packages we will use in this class:
