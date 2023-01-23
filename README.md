@@ -30,7 +30,7 @@ You should also install version 4.2 install of RTools if you are a windows user 
 Copy and paste the following command in RStudio to install the packages we will use in this class:
 source("https://raw.githubusercontent.com/coreysparks/Rcode/master/install_first_7093.R")
 
-#Course Texts: 
+# Course Texts: 
 Recommended books for this course:
 
 1) Intro to R for Spatial Analysis & Mapping 2nd Edition (not currently available via UTSA Library)
