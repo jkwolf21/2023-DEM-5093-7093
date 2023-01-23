@@ -41,7 +41,7 @@ Recommended books for this course:
 (https://www.packtpub.com/product/learning-qgis-third-edition/9781785880339)
 I also recommend downloading from the UTSA Library:
 
-3) Applied spatial data analysis with R 2nd edition from Springer Link (accessible through the UTSA library)
+3) Applied spatial data analysis with R 2nd edition from Springer Link (available via UTSA library)
 (https://link.springer.com/book/10.1007%2F978-1-4614-7618-4)
 I also recommend consulting with this text for information on the Tidyverse (https://www.tidyverse.org/) in R:
 
