@@ -1,0 +1,16 @@
+---
+title: "Homework 1"
+author: "Dr. Wolf"
+date: "2023-01-09"
+output: html_document
+---
+
+# Dr. Wolf
+
+## julia.wolf@utsa.edu
+
+Use a screen capture tool to take a capture of your R session showing version 4.2.2
+![this is my R](C:/Users/xee291/OneDrive - University of Texas at San Antonio/Documents/UTSA 2022-2023/GIS Class/Homework 1/part3_screenshot.png)
+
+Use a screen capture tool to take a capture of your QGIS session showing version 3.28
+![this is my QGIS](C:/Users/xee291/OneDrive - University of Texas at San Antonio/Documents/UTSA 2022-2023/GIS Class/Homework 1/part4_screenshot.png) 
