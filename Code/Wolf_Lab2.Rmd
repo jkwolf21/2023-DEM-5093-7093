@@ -86,6 +86,8 @@ Click [here](https://www.statology.org/percentile-vs-quartile-vs-quantile/) for 
 
 *(Remember 2278 from the QGIS portion of Lab 2?)*
 
+Find other coordinate references [here](https://spatialreference.org/).
+
 ```{r}
 new_sa<-st_transform(sa_acs2, crs = 2278)
 #Extract two tracts
