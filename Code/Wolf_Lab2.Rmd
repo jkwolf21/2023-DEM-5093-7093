@@ -1,0 +1,152 @@
+---
+title: "DEM 5093/7093 Lab 2 using R - Map projections and transformations"
+author: "Julia Kay Wolf, Ph.D.*"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_document:
+   toc: yes
+   toc_float: yes
+always_allow_html: yes
+---
+***
+*These are updates. Original version from Corey Sparks, Ph.D. can be found [here](https://github.com/coreysparks/DEM7093/blob/main/code/Lab%202%20in%20R.Rmd).  
+
+This lab complements the Lab 2 exercise using QGIS. 
+
+Here, we use `tidycensus` to read some tract data, learn its projection information, transform it to a new coordinate system, and measure some distance between features.
+
+***
+
+### Call Packages from Library
+```{r}
+library(tidycensus)
+library(sf)
+library(dplyr)
+```
+**Note: you can run `quietly=T` after any `library` command to remove the messages in the white boxes with ## in your output, e.g., `library(sf, quietly=T)`** 
+
+
+### Read in Bexar county tracts
+
+*(Seem familiar? We did this chunk below before in Lab 1/Homework 2.)*
+
+```{r, results="hide"}
+sa_acs<-get_acs(geography = "tract",
+                state="TX",
+                county = c("Bexar"),
+                year = 2019,
+                variables=c( "DP05_0001E", 
+                            "DP03_0119PE") ,
+                geometry = T, output = "wide")
+#create a county FIPS code - 5 digit
+sa_acs$county<-substr(sa_acs$GEOID, 1, 5)
+#rename variables and filter missing cases
+sa_acs2<-sa_acs%>%
+  mutate(totpop= DP05_0001E, ppov=DP03_0119PE) %>%
+#  st_transform(crs = 102740)%>%
+  na.omit()
+```
+
+
+### Find Coordinate System of Current Map
+
+**See [Coordinate Systems, Projections, and Transformations](https://pro.arcgis.com/en/pro-app/latest/help/mapping/properties/coordinate-systems-and-projections.htm) from ArcGIS Pro/ESRI for more information about these concepts.**
+```{r}
+st_crs(sa_acs2)
+```
+We see these tracts are in a Geographic Coordinate System (GCS) called North American Datum 1983 (NAD83).
+
+### Create Basic Map
+```{r}
+library(tmap)
+library(tmaptools)
+tm_shape(sa_acs2)+
+  tm_polygons("ppov", title="% in Poverty",
+              palette="Blues",
+              style="quantile",
+              n=5 )+
+  tm_format("World",
+            main.title="San Antonio Poverty Estimates (2019) - Quintile Breaks",
+            main.title.position=c('center','top'),
+            main.title.size=1.5,
+            title="Author: Julia Kay Wolf, Ph.D. \nSource: ACS 2019",
+            legend.title.size=1.7,
+            legend.outside=T,
+            legend.text.size=1.2)+
+  tm_scale_bar(position = c("left","bottom"))+
+  tm_compass()
+```
+
+Click [here](https://www.rdocumentation.org/packages/tmap/versions/3.3-3/topics/tm_layout) for more `tmap` aesthetic features.  
+
+Click [here](https://www.statology.org/percentile-vs-quartile-vs-quantile/) for a quick discussion on quantile vs. quintile. 
+
+
+### Re-Project Map into "South Central Texas" Projection
+
+*(Remember 2278 from the QGIS portion of Lab 2?)*
+
+```{r}
+new_sa<-st_transform(sa_acs2, crs = 2278)
+#Extract two tracts
+twtr<-new_sa%>%
+  filter(GEOID %in% c(48029181820, 48029110600))
+# get centroid coordinates for two tracts (these two tracts are where UTSA Main and Downtown Campuses are)
+tr_co<-st_centroid(twtr)
+head(tr_co)
+```
+
+
+## Measure Feet Apart
+```{r}
+st_distance(tr_co)
+64041.12/5280 #To get feet into miles
+```
+*(Remember in QGIS we got 12.13 miles?)*
+
+
+# Using QGIS within R
+This is another way to do the above task, by running a QGIS algorithm within R using the `qgisprocess` package. 
+
+*NOTE: The `qgisprocess` will not install on its own with this 4.2.2 version of R.*
+
+
+See the vignette [here](https://github.com/paleolimbot/qgisprocess) for more on what this package is and some examples.
+See [here](https://paleolimbot.github.io/qgisprocess/) to explain the following chunk for installing it.
+
+```{r, eval=F}
+install.packages("remotes")
+remotes::install_github("paleolimbot/qgisprocess") #Select 1 for ALL; next there will be a pop-up box, select Yes.
+```
+
+
+```{r}
+library(qgisprocess) #load the package
+qgis_configure() #set up QGIS - find the executable
+# qgis_algorithms() lists all the available routines in QGIS
+head(qgis_algorithms())
+```
+
+We can use `grep` to search for specific terms in the algorithms. 
+
+```{r}
+algs<-qgis_algorithms()
+algs[grep(x = algs$algorithm, "distance"),"algorithm"]
+qgis_show_help("qgis:distancematrix")
+```
+
+```{r}
+out = qgis_run_algorithm(alg = "qgis:distancematrix",
+               INPUT = tr_co[1,],
+               INPUT_FIELD = "GEOID", 
+               TARGET = tr_co[2,],
+               TARGET_FIELD = "GEOID",
+               MATRIX_TYPE = 0, 
+               NEAREST_POINTS = 1)
+output_sf <- sf::read_sf(qgis_output(out, "OUTPUT"))
+output_sf$Distance
+64041.12/5280 #To get feet into miles
+```
+NOTE: `tr_co[1,]` means select the first row from `tr_co` which is one of our two tracts. `tr_co[2,]` means select the 2nd row, which is our other tract.
+
+*(See it's the same 12.13 mile distance?)* 
