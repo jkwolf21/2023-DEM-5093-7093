@@ -1,0 +1,64 @@
+---
+title: "Lab 3 - Geocoding in R using Census Geocoder"
+author: "Julia Kay Wolf, Ph.D.*"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_document:
+    df_print: paged
+    fig_height: 7
+    fig_width: 7
+    toc: yes
+    toc_float: yes
+---
+*These are updates. Original version from Corey Sparks, Ph.D. can be found [here](https://rpubs.com/corey_sparks/576976).  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, eval=F}
+install.packages("censusxy")
+```
+
+# Setup
+In this example, we will geocode addresses using the Census Bureau's batch geocoding service. The work will be done by the `censusxy` [package](https://cran.r-project.org/web/packages/censusxy/vignettes/censusxy.html). 
+
+# Read in the address data
+We will use the from the CSV created in the [Lab 3 exercise](https://github.com/jkwolf21/2023-DEM-5093-7093/blob/main/Code/DEM%205093_7093%20Lab%203_Spring2023.pdf).
+
+```{r}
+library(readr)
+library(data.table)
+addr<-read.csv("https://raw.githubusercontent.com/jkwolf21/2023-DEM-5093-7093/main/Code/wic_west_side.csv") #Note this is the RAW data* 
+head(addr)
+```
+* See this [stack overflow discussion](https://stackoverflow.com/questions/6299220/access-a-url-and-read-data-with-r) about *raw* vs. *display* data from GitHub.
+
+```{r}
+addr<-addr[c(6, 12:14)]
+names(addr)<-c("street", "city", "st", "zip")
+head(addr)
+library(censusxy)
+results<-cxy_geocode(addr,
+                     street = "street",
+                     city = "city",
+                     state ="st",
+                     zip = "zip",
+                     class="sf",
+                     output = "simple")
+```
+
+
+# Basic interactive map of the points
+```{r}
+library(mapview)
+mapview(results, layer.name="WIC Services")
+```
+
+# Save the results if you want
+We can write the results out to a shapefile now
+
+```{r, eval=F}
+library(sf)
+st_write(results,dsn="C:/Users/.../GIS Class/Lab 3", layer="westside_wic", driver = "ESRI Shapefile",delete_layer = T, append=T)
+```
