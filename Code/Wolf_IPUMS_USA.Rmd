@@ -1,0 +1,347 @@
+---
+title: "Using IPUMS USA for Estimation of Population Characteristics in Various Geographic Areas"
+author: "Julia Kay Wolf, Ph.D.*"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_document:
+    df_print: paged
+    fig_height: 7
+    fig_width: 7
+    toc: yes
+    toc_float: yes
+    code_download: true
+---
+*These are updates. The 2022 version from Corey Sparks, Ph.D. can be found [here](https://github.com/coreysparks/DEM7093/tree/main/code). 
+
+*****
+
+In this example we will use the [IPUMS USA](https://usa.ipums.org/usa/) data to produce survey-based estimates for various geographic levels present in the IPUMS. This example uses the 2014-2018 ACS 5-year microdata. 
+
+Click [here](https://yihui.org/knitr/options/#chunk-options) for more info on setting chunk options.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE) #this is used to set the default values of chunk options for this document 
+```
+
+The good folks at IPUMS have created a library to read in their data from the .gz file that you download. Be sure you right click and save the DDI codebook when you create your extract
+
+![](DDIimage.png)
+
+This will save the .XML file that contains all the information on the data (what is contained in the data file) to your computer. When using IPUMS, it will have a name like `usa_xxxxx.xml` where the x's represent the extract number (I'm on 2 as of today). 
+
+You will also need to download the data file, by right clicking the **Download .DAT** link in the above image. This will save a .GZ file to your computer, again with a name like: `usa_xxxxx.dat.gz`. Make sure this file and the XML file from above are in the same folder, preferably your class folder. 
+
+Be sure the `ipumsr` package is installed. Click [here](https://cran.r-project.org/web/packages/ipumsr/ipumsr.pdf) for a PDF of `ipumsr` package documentation.
+
+```{r}
+library(ipumsr) #new library for GIS class
+ddi <- read_ipums_ddi("usa_00004.xml") #R Markdown uses the same directory where you save this file, so no need to repeat unless your .xml is located elsewhere
+data <- read_ipums_micro(ddi)
+data<-haven::zap_labels(data) #necessary to avoid problems with "labelled" data class (removes variable labels); 'ipumsr' imports package 'haven' to use zap_labels
+names(data)<-tolower(names(data)) #tolower changes any uppercase letters in variable names to lowercase
+```
+
+# Load Some Other Packages
+```{r, message=FALSE}
+library(survey, quietly = T)
+library(tidyverse, quietly = T)
+library(car, quietly = T)
+library(ggplot2, quietly = T)
+library(tigris, quietly = T)
+library(classInt, quietly = T)
+library(tmap, quietly = T)
+```
+
+
+# Download Geographic Data for Public Use Microdata Areas (PUMAs)
+The IPUMS data we just downloaded doesn't come with any geographic data (i.e., it has FIPS codes, but not the geographic data component).
+
+The Public Use Microdata Area is the lowest level of geography in the PUMS data. They correspond to geographic ares of ~ 100,000 people. 
+Here are some helpful sites about PUMAs:
+
+1. [Missouri Census Data Center - All About Public-Use Microdata Areas (PUMAs)](https://mcdc.missouri.edu/geography/PUMAs.html)  
+
+2. [US Census - Public Use Microdata Areas (PUMAs)](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/pumas.html)  
+
+3. [US Census - 2020 Public Use Microdata Areas Program Frequently Asked Questions (FAQs)](https://www2.census.gov/geo/pdfs/reference/puma2020/2020PUMA_FAQs.pdf)
+
+For more information about `tigris` package click [here](https://rdrr.io/cran/tigris/man/tigris.html) and [here](https://cran.r-project.org/web/packages/tigris/tigris.pdf).
+
+```{r}
+options(tigris_class = "sf")
+pumas<-pumas(state = "TX", #match these to the data you downloaded from IPUMS
+             year = 2018, #match these to the data you downloaded from IPUMS
+             cb = T)
+plot(pumas["GEOID10"],
+     main = "Public Use Microdata Areas in Texas")
+mapview::mapview(pumas, zcol= "GEOID10")
+```
+
+
+# Prepare Variables
+Here Dr. Sparks recoded several demographic variables.
+
+*READ YOUR CODEBOOK (DDI).*
+
+Click [here](https://www.rdocumentation.org/packages/dplyr/versions/1.0.10/topics/recode) for R documentation on the function `Recode`.  
+
+Click [here](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/interaction) for R documentation on the function `interaction`.  
+
+Click [here](https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/relevel) for R documentation on the function `relevel`.  
+
+Click [here](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/factor) for R documentation on the function `as.factor`.  
+
+Click [here](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/ifelse) for R documentation on the function `ifelese`.
+
+*READ YOUR CODEBOOK (DDI).*
+
+* See how your variables are coded.
+
+* See how missing values are coded.
+```{r}
+data$pwt <- data$perwt
+data$hwt <- data$hhwt
+#race/ethnicity
+data$hisp <- Recode(data$hispan, recodes = "9=NA; 1:4='Hispanic'; 0='NonHispanic'")
+data$race_rec <- Recode(data$race, recodes = "1='White'; 2='Black'; 3='Other'; 4:6='Asian'; 7:9='Other'")
+data$race_eth <- interaction(data$hisp, data$race_rec, sep = "_")
+data$race_eth  <- as.factor(ifelse(substr(as.character(data$race_eth),1,8) == "Hispanic", "Hispanic", as.character(data$race_eth)))
+data$race_eth <- relevel(data$race_eth, ref = "NonHispanic_White")
+#sex
+data$male <- ifelse(data$sex == 1,1,0)
+#education
+data$educ_level<- Recode(data$educd, recodes = "2:61='0LT_HS';62:64='1_HSD/GED';65:80='2_somecoll';90:100='2_somecoll'; 81:83='3_AssocDegree';101='4_bachelordegree'; 110:116='4_BAplus_GradDegree'; else=NA")
+#employment
+data$employed <- Recode(data$wrklstwk, recodes = "1=0;2=1; else=NA")
+#citizenship
+data$cit<-Recode(data$citizen, recodes = "1='US born'; 2='naturalized'; 3:4='notcitizen';else=NA ")
+#industry
+data$ind_group<-Recode(data$ind, recodes = "170:490='ag_extract'; 770='construction'; 1070:3990='manufac'; 4070:5790='whole_retail'; 6070:6390='trans'; 6470:6780='information'; 6870:7190= 'fire'; 7270=7790='prof/sci/manage'; 7860:8470='edu/social'; 8560:8690='arts'; 8770:9290='other'; 9370:9590='public_adm'; 9670:9870='military'; else=NA ")
+data$proftech <- Recode(data$ind, recodes = "7270:7490=1; 0=NA; else=0")
+#age in 10 year intervals
+data$agecat<-cut(data$age, breaks = c(0, 18, 20, 30, 40, 50, 65, 120), include.lowest = T)
+data$income <- ifelse(data$incwage>=999998, NA, data$incwage) #if income is greater than 999998 then recode it as NA, otherwise keep as is
+```
+
+
+
+# Generate Survey Design Object
+Here we identify the person weights and the survey design variables. This is a stratified clustered sample. Here, for the ACS the strata are geographic chunks and the clusters are households. It's not a random sample so need person weights.
+
+```{r}
+head(data$perwt) #shows how many people each person in the sample represents (shows for the first 6 people)
+sum(data$perwt) #gives you the population of the place (in this case, Texas)
+```
+
+
+```{r}
+des<-svydesign(ids = ~cluster, #these variables (cluster, strata, and pwt) are automatically downloaded from IPUMS
+               strata = ~ strata,
+               weights = ~pwt,
+               data = data)
+```
+
+# Perform Survey Estimation for PUMAs
+The `svyby()` function allows us calculate estimates for different **sub-domains** within the data, this could be a demographic characteristic, but we'll use our geographic level. Of course you could do both.... 
+
+Click [here](https://rdrr.io/cran/survey/man/svyby.html) or [here](https://cran.r-project.org/web/packages/survey/survey.pdf) for R documentation on `svyby`.  
+
+Click [here](https://www.rdocumentation.org/packages/survey/versions/4.1-1/topics/svytable) for R documentation on the function `svytable`.  
+
+Click [here](https://cran.r-project.org/web/packages/lazyeval/vignettes/lazyeval.html) for R documentation on formulas and `~`.  
+
+Click [here](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/AsIs) for R documentation on `I`.
+
+```{r}
+test<-svytable(~I(cit=="US born")+puma+sex, design=des )
+puma_est_edu<-svyby(formula = ~educ_level, #what I want to take the % of, I want the % in each education level
+                    by = ~puma, #...so taking the % of each educational level in each PUMA
+                    design = subset(des, age>25), #Census doesn't get education level for those age 25 and under; subsetting the dataset to only include those over 25
+                    FUN=svymean, #the function I want is survey mean, so takes the mean of each level of this categorical variable and give a %
+                    na.rm = TRUE ) #remove any missing values coded in the variable before it does calculations
+puma_est_employ<-svyby(formula = ~employed, #employment rate (because coded 1,0)
+                       by = ~puma,
+                       design=subset(des, age %in% 18:65), #get working age people between age 18 and 65
+                       FUN=svymean,
+                       na.rm = TRUE )
+puma_est_industry<-svyby(formula = ~proftech, #proportion of each PUMA where the workforce is proftech
+                         by = ~puma+sex+race_eth,
+                         design = subset(des, employed==1),
+                         FUN = svymean,
+                         na.rm = TRUE )
+```
+
+
+```{r}
+library(reldist)
+gini.puma<-data%>% #calculate this measure of income inequality (Gini)
+  filter(income >0, is.na(income)==F)%>% #filer to only have positive income (so not missing)
+  group_by( puma, race_eth)%>% #group by PUMA and race/ethnicity; for every PUMA calculate income inequality between race/ethnicity groups
+  summarize(ineq = gini(income, weights = pwt))%>% #gini function comes from the reldist package which allows person weights to calculate properly
+  ungroup()
+```
+
+
+```{r}
+head(puma_est_edu) #estimates of education by PUMA; first row shows about 23% of residents over age 25 in that PUMA have less than HS education; can map any column
+head(puma_est_employ)
+head(puma_est_industry) #first row shows for males non-Hispanic White is about 2% prof/tech in that PUMA
+```
+
+# Join to Geography
+
+Joining the survey estimates data to the geography data. Every row in each dataset is one PUMA.
+
+See [How to Do a Left Join in R (With Examples)](https://www.statology.org/left-join-in-r/) and [Merge Data Frames in R](https://r-coder.com/merge-r/) for some more insight into joins.
+
+```{r}
+pumas$puma<-as.numeric(pumas$PUMACE10) #PUMACE10 is the PUMA variable in the spatial data; have to make it numeric because it's numeric in the survey estimates
+geo1<-left_join(pumas, puma_est_employ, by=c("puma"= "puma")) #join the geography (pumas) to the statistical estimate (puma_est_employ); the variable captured in both is called "puma"
+head(geo1)
+geo2<-left_join(pumas, puma_est_industry, by=c("puma"= "puma"))
+head(geo2)
+geo3<-left_join(pumas, gini.puma, by=c("puma"= "puma"))
+head(geo2)
+```
+
+# Map Estimates
+
+## Employment Rates by PUMA
+```{r}
+tmap_mode("view") #can use tmap because all spatial data
+geo1%>% #feed this employment dataset (made in last chunk) into tmap
+  tm_shape()+
+  tm_polygons("employed", #map the employed column
+              style="kmeans", #type of mapping style breaks, could use Fisher or jenks or quantile etc.
+              n=8, #8 classes
+              legend.hist = TRUE) + #plot the histogram (if it weren't the interactive map)
+  tm_layout(legend.outside = TRUE,  #plot the histogram/legend outside (if it weren't the interactive map)
+            title = "Employment rate in Texas PUMAs \n 2014-2018") 
+```
+
+```{r}
+tmap_mode("plot") #"view" isn't working for some reason
+geo2%>%
+  tm_shape()+
+  tm_polygons("proftech",
+              style="kmeans",
+              n=8,
+              legend.hist = TRUE) +
+ tm_layout(legend.outside = TRUE,
+            title = "Professional/Scientific/Technical Employment in Texas PUMAs \n 2014-2018")  
+```
+
+```{r}
+tmap_mode("plot") #"view" isn't working for some reason 
+geo3%>%
+tm_shape()+
+  tm_polygons("ineq",
+              style="kmeans",
+              n=8,
+              legend.hist = TRUE) +
+ tm_layout(legend.outside = TRUE,
+            title = "Gini in Texas PUMAs \n 2014-2018")  
+```
+
+
+## Estimation for Metro Areas
+Here we use core based statistical areas instead of PUMAs. The geography corresponding to Metro Areas are Core Based Statistical Areas.
+
+There are a lot of places in the state that aren't Metropolitan areas, so they're not represented at all in the map or the estimates.
+
+```{r}
+mets<-core_based_statistical_areas(cb = T, year = 2018) #function from tigris to get these geographies
+mets<-mets[grep(mets$NAME,pattern =  "TX"),]
+plot(mets["NAME"])
+sts<-states(cb=T, year=2018)
+sts<-sts%>%
+  filter(GEOID==48)
+```
+
+## Estimates by Metro Areas
+
+Redo the survey estimation calculations, but this time use a different grouping variable `met2013`.
+```{r}
+met_est_edu<-svyby(formula = ~educ_level,
+                   by = ~met2013, #See, not PUMAs; Metro Areas to correspond to the Metro Areas geometries we just downloaded; rest of code is the same
+                   design=subset(des,age>25),
+                   FUN=svymean,
+                   na.rm=T )
+met_est_employ<-svyby(formula = ~employed,
+                      by = ~met2013,
+                      design=subset(des, age%in%18:65),
+                      FUN=svymean,
+                      na.rm=T )
+met_est_industry<-svyby(formula = ~proftech,
+                        by = ~met2013,
+                        design=subset(des, employed==1),
+                        FUN=svymean,
+                        na.rm=T )
+head(met_est_edu)
+head(met_est_employ)
+head(met_est_industry)
+```
+
+
+```{r}
+mets$met2013<-as.numeric(mets$GEOID)
+geo3<-left_join(mets, met_est_employ,by=c("met2013"= "met2013"))
+```
+
+Note, grey Metros are ones that are not identified in the ACS because of the population limit (but they are in the spatial data).
+```{r}
+tmap_mode("plot") #"view" isn't working for some reason
+geo3%>%
+  tm_shape()+
+  tm_polygons("employed",
+              style="kmeans",
+              n=8,
+              legend.hist = TRUE) +
+ tm_layout(legend.outside = TRUE,
+            title = "Employment rate in Texas Metro Areas \n 2014-2018")  
+```
+
+
+## Estimation for Counties
+
+```{r, results='hide'}
+cos<-counties(cb= T,state = "TX", year = 2018)
+plot(cos["NAME"])
+sts<-states(cb=T, year=2018)
+sts<-sts%>%
+  filter(GEOID==48)
+```
+
+## Estimates by County Area
+```{r}
+cos_est_edu<-svyby(formula = ~educ_level,
+                   by = ~countyfip,
+                   design=subset(des,age>25),
+                   FUN=svymean, na.rm=T )
+cos_est_employ<-svyby(formula = ~employed,
+                      by = ~countyfip,
+                      design=subset(des, age%in%18:65),
+                      FUN=svymean, na.rm=T )
+cos_est_industry<-svyby(formula = ~proftech,
+                        by = ~countyfip,
+                        design=subset(des, employed==1),
+                        FUN=svymean, na.rm=T )
+head(cos_est_edu)
+head(cos_est_employ)
+head(cos_est_industry)
+```
+
+Again, the ACS doesn't identify counties in the microdata except for certain ones that fit this criteria mentioned in this link: [here](https://usa.ipums.org/usa-action/variables/COUNTYFIP#description_section).
+
+```{r}
+cos$cofip<-as.numeric(cos$COUNTYFP)
+geo4<-left_join(cos, cos_est_employ,by=c("cofip"= "countyfip"))
+tmap_mode("plot") #"view" isn't working for some reason
+geo4%>%
+  tm_shape()+
+  tm_polygons("employed",
+              style="kmeans",
+              n=8,
+              legend.hist = TRUE) +
+ tm_layout(legend.outside = TRUE,
+            title = "Employment rate in Texas Counties \n 2014-2018")  
+```
